@@ -1,0 +1,5 @@
+pydantic~=2.7.2
+requests~=2.32.3
+dateparser~=1.2.0
+protobuf
+betterproto
