@@ -2,7 +2,7 @@ import abc
 import datetime
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import List
+from typing import List, Optional
 
 from pydantic import BaseModel
 
@@ -25,25 +25,33 @@ class VideoComment(BaseModel):
     likes: int
 
 
+class VideoType(StrEnum):
+    VIDEO = "VIDEO"
+    SHORT = "SHORT"
+
+
 class Video(BaseModel):
     id: str
     title: str
-    description: str
-    date: datetime.datetime
     view_count: int
-    like_count: int
-    dislike_count: int
-    comment_count: int
     thumbnail_url: str
+    video_type: VideoType
+    description: Optional[str] = ""
+    date: Optional[datetime.datetime] = None
+    like_count: Optional[int] = 0
+    comment_count: Optional[int] = 0
     comments: List[VideoComment] = []
 
     @property
     def url(self):
+        if self.video_type == VideoType.SHORT:
+            return f'https://www.youtube.com/shorts/{self.id}'
         return f'https://www.youtube.com/watch?v={self.id}'
 
 
 class Channel(BaseModel):
     id: str
+    name: str
     target_id: str
     title: str
     description: str
@@ -51,6 +59,7 @@ class Channel(BaseModel):
     video_count: int
     url: str
     videos: List[Video]
+    shorts: List[Video]
 
 
 class ListVideoStopCondition(abc.ABC):
@@ -68,7 +77,9 @@ class ListCommentStopCondition(abc.ABC):
 @dataclass
 class GetChannelOptions:
     list_video_stop_conditions: List[ListVideoStopCondition]
-    list_comment_stop_conditions: List[ListCommentStopCondition]
+    list_video_comment_stop_conditions: List[ListCommentStopCondition]
+    list_short_stop_conditions: List[ListVideoStopCondition]
+    list_short_comment_stop_conditions: List[ListCommentStopCondition]
 
 
 class VideoListRepository(abc.ABC):

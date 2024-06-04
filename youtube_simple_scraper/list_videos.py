@@ -5,8 +5,11 @@ from typing import List, Tuple
 import dateparser
 import requests
 
-from youtube_simple_scraper.entities import GetChannelOptions, Video, Channel, VideoComment, VideoListRepository
-from youtube_simple_scraper.list_comments import CommentRepository
+from youtube_simple_scraper.entities import GetChannelOptions, Video, Channel, VideoComment, VideoListRepository, \
+    VideoType
+from youtube_simple_scraper.list_short import get_shorts
+from youtube_simple_scraper.list_video_comments import VideoCommentRepository
+
 from youtube_simple_scraper.list_videos_request import build_list_videos_request_payload, \
     build_list_videos_request_headers, find_channel_basic_info
 
@@ -15,67 +18,134 @@ default_logger = logging.getLogger(__name__)
 
 class ApiVideoListRepository(VideoListRepository):
 
-    def __init__(self, comment_repo: CommentRepository, logger: logging.Logger = default_logger):
-        self._comment_repo = comment_repo
+    def __init__(self, video_comment_repo: VideoCommentRepository, shorts_comment_repo: VideoCommentRepository,
+                 logger: logging.Logger = default_logger):
+        self._video_comment_repo = video_comment_repo
+        self._shorts_comment_repo = shorts_comment_repo
         self._logger = logger
 
     def get_channel(self, channel_name: str, opts: GetChannelOptions) -> Channel:
-        page_count = 0
         self._logger.info(f"Fetching channel {channel_name}")
         response_body = find_channel_basic_info(channel_name)
         self._logger.info(f"Found channel {channel_name}")
         for attempt in range(0, 3):
             self._logger.info(f"Attempt {attempt + 1} to get channel {channel_name}")
-            channel, continuation_token, is_valid = self._extract_channel_basic_info(response_body)
+            channel, videos_continuation_token, is_valid = self._extract_channel_basic_info(response_body)
+            channel.name = channel_name
             if not is_valid:
                 self._logger.info(f"Invalid response for channel {channel_name}")
                 continue
 
-            initial_videos_added = False
-            total_videos = []
-            while True:
-                if self._should_stop_fetch_videos(total_videos, page_count, opts):
-                    self._logger.info(f"Stop condition reached for channel {channel_name}")
-                    break
-                self._logger.info(f"Fetching page {page_count} for channel {channel_name}")
-                response_body = self._send_next_video_page_request(channel_name, channel.id, continuation_token)
-                videos = self._extract_raw_videos(response_body)
-                if not initial_videos_added:
-                    videos = channel.videos + videos
-                    channel.videos = []
-                    initial_videos_added = True
-                continuation_token = self._extract_token(response_body)
-                for i in range(len(videos)):
-                    comments_page = 0
-                    video = videos[i]
-                    while True:
-                        if self._should_stop_fetch_video_comments(video, video.comments, comments_page, opts):
-                            self._logger.info(f"Stop condition reached for video {video.id}")
-                            break
-                        self._logger.info(f"Fetching comments for video {video.url} page {comments_page + 1}")
-                        comments = self._comment_repo.next(video.id)
-                        if len(comments) == 0:
-                            self._logger.info(f"No comments found for video {video.url}")
-                            continue
-                        self._logger.info(f"Found {len(comments)} comments for video {video.url}")
-                        videos[i].comments.extend(comments)
-                        comments_page += 1
-                total_videos.extend(videos)
-                page_count += 1
-                if not continuation_token:
-                    self._logger.info(f"No more pages for channel {channel_name}")
-                    break
-            channel.videos = total_videos
+            channel.videos = self._fetch_next_videos(channel, opts, videos_continuation_token)
+            self._add_comments_to_videos(opts, channel.videos)
+
+            channel.shorts = self._fetch_shorts_videos(channel, opts)
+            self._add_comments_to_shorts(opts, channel.shorts)
+
             return channel
+
+    def _fetch_next_videos(self, channel: Channel, opts: GetChannelOptions, continuation_token: str) -> List[Video]:
+        initial_videos_added = False
+        total_videos = []
+        page_count = 0
+        while True:
+            if self._should_stop_fetch_videos(total_videos, page_count, opts):
+                self._logger.info(f"Videos stop condition reached for channel {channel.name}")
+                break
+            self._logger.info(f"Fetching page {page_count} for channel {channel.name}")
+            response_body = self._send_next_video_page_request(channel.name, channel.id, continuation_token)
+            videos = self._extract_raw_videos(response_body)
+            if not initial_videos_added:
+                videos = channel.videos + videos
+                channel.videos = []
+                initial_videos_added = True
+            continuation_token = self._extract_token(response_body)
+            total_videos.extend(videos)
+            page_count += 1
+            if not continuation_token:
+                self._logger.info(f"No more pages for channel {channel.name}")
+                break
+        return total_videos
+
+    def _add_comments_to_videos(self, opts, videos):
+        for i in range(len(videos)):
+            video = videos[i]
+            comments_page = 0
+            while True:
+                if self._should_stop_fetch_video_comments(video, video.comments, comments_page, opts):
+                    self._logger.info(f"Stop condition reached for video {video.id}")
+                    break
+                self._logger.info(f"Fetching comments for video {video.url} page {comments_page + 1}")
+                comments = self._video_comment_repo.next(video.id)
+                if len(comments) == 0:
+                    self._logger.info(f"No comments found for video {video.url}")
+                    continue
+                self._logger.info(f"Found {len(comments)} comments for video {video.url}")
+                videos[i].comments.extend(comments)
+                comments_page += 1
+
+    def _fetch_shorts_videos(self, channel: Channel, opts: GetChannelOptions) -> List[Video]:
+        total_videos = []
+        page_count = 0
+        token = ""
+        while True:
+            if self._should_stop_fetch_shorts(total_videos, page_count, opts):
+                self._logger.info(f"Shorts stop condition reached for channel {channel.name}")
+                break
+            self._logger.info(f"Fetching shorts page {page_count} for channel {channel.name}")
+            raw_shorts, token = get_shorts(channel.id, token)
+            for short in raw_shorts:
+                video = Video(
+                    id=short["id"],
+                    title=short["title"],
+                    thumbnail_url=short["thumbnail"],
+                    view_count=short["view_count"],
+                    comments=[],
+                    video_type=VideoType.SHORT
+                )
+                total_videos.append(video)
+            page_count += 1
+            if not token or len(raw_shorts) == 0:
+                self._logger.info(f"No more shorts pages for channel {channel.name}")
+                break
+        return total_videos
+
+    def _add_comments_to_shorts(self, opts, shorts: List[Video]) -> None:
+        for i in range(len(shorts)):
+            short = shorts[i]
+            comments_page = 0
+            while True:
+                if self._should_stop_fetch_shorts_comments(short, short.comments, comments_page, opts):
+                    self._logger.info(f"Stop condition reached for short {short.id}")
+                    break
+                self._logger.info(f"Fetching comments for short {short.url} page {comments_page + 1}")
+                comments = self._video_comment_repo.next(short.id)
+                if len(comments) == 0:
+                    self._logger.info(f"No comments found for short {short.url}")
+                    continue
+                self._logger.info(f"Found {len(comments)} comments for short {short.url}")
+                shorts[i].comments.extend(comments)
+                comments_page += 1
 
     @staticmethod
     def _should_stop_fetch_videos(videos: List[Video], page: int, opts: GetChannelOptions) -> bool:
         return any([condition.should_stop(videos, page) for condition in opts.list_video_stop_conditions])
 
     @staticmethod
+    def _should_stop_fetch_shorts(videos: List[Video], page: int, opts: GetChannelOptions) -> bool:
+        return any([condition.should_stop(videos, page) for condition in opts.list_short_stop_conditions])
+
+    @staticmethod
     def _should_stop_fetch_video_comments(video: Video, comments: List[VideoComment], page: int,
                                           opts: GetChannelOptions) -> bool:
-        return any([condition.should_stop(video, comments, page) for condition in opts.list_comment_stop_conditions])
+        return any([
+            condition.should_stop(video, comments, page) for condition in opts.list_video_comment_stop_conditions])
+
+    @staticmethod
+    def _should_stop_fetch_shorts_comments(video: Video, comments: List[VideoComment], page: int,
+                                           opts: GetChannelOptions) -> bool:
+        return any([
+            condition.should_stop(video, comments, page) for condition in opts.list_short_comment_stop_conditions])
 
     @staticmethod
     def _send_next_video_page_request(channel_id: str, browse_id: str, continuation_token: str) -> dict:
@@ -308,8 +378,7 @@ class ApiVideoListRepository(VideoListRepository):
     def _adapt_raw_videos(self, raw_videos: List[dict]) -> List[Video]:
         extracted_videos: List[Video] = []
         for raw_video in raw_videos:
-            likes = (raw_video.get("factoid", {}).get("factoidRenderer", {})
-                     .get("factoidRenderer", {}).get("values", {}).get(0, {}).get("simpleText", ""))
+
             view_count_text = raw_video.get("viewCountText", {}).get("simpleText", '')
             view_count = 0
             if view_count_text:
@@ -339,17 +408,26 @@ class ApiVideoListRepository(VideoListRepository):
                         raw_video['richThumbnail']['movingThumbnailRenderer']['movingThumbnailDetails']['thumbnails'][0]
                 except:
                     pass
+            likes = 0
+            likes_str = (
+                raw_video.get("factoid", {}).get("factoidRenderer", {})
+                .get("factoidRenderer", {}).get("values", {}).get(0, {}).get("simpleText", ""))
+            if likes_str:
+                likes = int(likes_str.split(' ')[0].replace(",", ""))
+            if likes == 0:
+                likes = int(raw_video.get("likes", 0))
+
             v = Video(
                 id=raw_video["videoId"],
                 title=title,
                 description=description,
                 date=date,
                 view_count=view_count,
-                like_count=int(raw_video.get("likes", 0)),
-                dislike_count=int(raw_video.get("dislikes", 0)),
+                like_count=likes,
                 comment_count=int(raw_video.get("commentCount", 0)),
                 thumbnail_url=thumbnail_url,
                 comments=[],
+                video_type=VideoType.VIDEO
             )
             extracted_videos.append(v)
         return self._sort_videos_by_date(extracted_videos)

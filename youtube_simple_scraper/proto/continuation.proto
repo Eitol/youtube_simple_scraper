@@ -55,32 +55,39 @@ message ParamsMessage {
 }
 
 
-//
-//message String1Message {
-//  uint32 int_10 = 10; // fixed 35
-//}
-//
-//message TargetSubMessage {
-//  TargetSubSubMessage string_1 = 3;
-//}
-//
-//message TargetSubSubMessage {
-//  TargetSubSubSubMessage string_1 = 19;
-//}
-//
-//message TargetSubSubSubMessage {
-//  string target_id = 1; // target_id of the channel. Example: 668fd750-0000-2818-a168-d4f547f4bb38
-//}
-//
-//message TargetMessage {
-//  TargetSubMessage sub_message_1 = 110;
-//}
-//
-//message GetChannelStatsMessageSubMessage {
-//  string string_1 = 2;
-//  string target_message_3 = 3;
-//}
-//
-//message GetChannelStatsMessage {
-//  GetChannelStatsMessageSubMessage sub_message_1 = 80226972;
-//}
+/**** Shorts ****/
+
+message ShortsRequestPaginationSubSub {
+  string video_id = 4;
+  oneof int_6 {
+    uint32 uint_6 = 6; // Fixed 0
+  }
+  oneof int_15 {
+    uint32 uint_15 = 15; // Fixed 2
+  }
+  oneof int_25 {
+    uint32 uint_25 = 25; // Fixed 0
+  }
+}
+
+message ShortsRequestPaginationSub {
+  ShortsRequestPaginationSubSub sub_message_4 = 4;
+  oneof int_6 {
+    int32 uint_6 = 6; // Fixed 1
+  }
+  bytes string_8 = 8; // Fixed "shorts-engagement-panel-comments-section"
+}
+
+message ShortsRequestPagination {
+  ShortsRequestPaginationSub sub_message_1 = 53;
+}
+
+// Principal message for shorts
+message ShortsRequestSub {
+  bytes sort_type = 2; // "FEcomment_shorts_web_top_level"
+  bytes pagination = 3; // example: qgNCIhQiC1A5b28tckJlN09VMAB4AsgBADABQihzaG9ydHMtZW5nYWdlbWVudC1wYW5lbC1jb21tZW50cy1zZWN0aW9u
+}
+
+message ShortContinuationToken {
+  ShortsRequestSub params = 80226972;
+}

@@ -6,6 +6,7 @@ import dateparser
 import requests
 
 from youtube_simple_scraper.continuation_token import CommentsContinuationTokenBuilder
+from youtube_simple_scraper.counters import comment_counter_to_int
 
 USER_AGENT = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
               "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -43,7 +44,6 @@ def build_list_videos_request_headers(channel_id: str) -> dict:
 
 
 def build_list_videos_request_payload(channel_id: str, browse_id: str, continuation_token: str) -> dict:
-    epoch_milli = int(datetime.datetime.now().timestamp() * 1000)
     base = {
         "context": {
             "client": {
@@ -67,14 +67,6 @@ def build_list_videos_request_payload(channel_id: str, browse_id: str, continuat
                 "screenWidthPoints": 1526,
                 "screenHeightPoints": 1546,
                 "utcOffsetMinutes": -240,
-                "memoryTotalKbytes": "8000000",
-                "mainAppWebInfo": {
-                    "graftUrl": f"/@{channel_id}",
-                    "pwaInstallabilityStatus": "PWA_INSTALLABILITY_STATUS_UNKNOWN",
-                    "webDisplayMode": "WEB_DISPLAY_MODE_BROWSER",
-                    "isWebNativeShareAvailable": False
-                },
-                "timeZone": "America/Santiago"
             },
             "user": {
                 "lockedSafetyMode": True
@@ -84,78 +76,6 @@ def build_list_videos_request_payload(channel_id: str, browse_id: str, continuat
                 "internalExperimentFlags": [],
                 "consistencyTokenJars": []
             },
-            "adSignalsInfo": {
-                "params": [
-                    {
-                        "key": "dt",
-                        "value": str(epoch_milli)
-                    },
-                    {
-                        "key": "flash",
-                        "value": "0"
-                    },
-                    {
-                        "key": "frm",
-                        "value": "0"
-                    },
-                    {
-                        "key": "u_tz",
-                        "value": "-240"
-                    },
-                    {
-                        "key": "u_his",
-                        "value": "4"
-                    },
-                    {
-                        "key": "u_h",
-                        "value": "1692"
-                    },
-                    {
-                        "key": "u_w",
-                        "value": "3008"
-                    },
-                    {
-                        "key": "u_ah",
-                        "value": "1667"
-                    },
-                    {
-                        "key": "u_aw",
-                        "value": "3008"
-                    },
-                    {
-                        "key": "u_cd",
-                        "value": "24"
-                    },
-                    {
-                        "key": "bc",
-                        "value": "31"
-                    },
-                    {
-                        "key": "bih",
-                        "value": "1546"
-                    },
-                    {
-                        "key": "biw",
-                        "value": "1511"
-                    },
-                    {
-                        "key": "brdim",
-                        "value": "-3008,145,-3008,145,3008,145,3008,1667,1526,1546"
-                    },
-                    {
-                        "key": "vis",
-                        "value": "0"
-                    },
-                    {
-                        "key": "wgl",
-                        "value": "false"
-                    },
-                    {
-                        "key": "ca_type",
-                        "value": "image"
-                    }
-                ]
-            }
         },
         "browseId": browse_id,
     }
@@ -183,7 +103,7 @@ def get_comments_from_api(video_id: str, token: str = "") -> Tuple[List[dict], s
     if token:
         continuation_token = token
     else:
-        continuation_token = CommentsContinuationTokenBuilder.build(video_id, 0)
+        continuation_token = CommentsContinuationTokenBuilder.build_video_list_token(video_id, 0)
     url = "https://www.youtube.com/youtubei/v1/next?prettyPrint=false"
     payload = json.dumps({
         "context": {
@@ -259,11 +179,10 @@ def _extract_raw_comments(response) -> Tuple[List[dict], str, bool]:
                 likes = 0
                 toolbar = ep["payload"]["commentEntityPayload"]["toolbar"]
                 if "likeCountA11y" in toolbar:
-                    likes = _comment_counter_to_int(toolbar["likeCountA11y"])
+                    likes = comment_counter_to_int(toolbar["likeCountA11y"])
                 replies_count = 0
                 if "replyCountA11y" in toolbar:
-                    replies_count = _comment_counter_to_int(toolbar["replyCountA11y"])
-
+                    replies_count = comment_counter_to_int(toolbar["replyCountA11y"])
                 comments.append({
                     "id": comment_id,
                     "author": author,
@@ -276,19 +195,6 @@ def _extract_raw_comments(response) -> Tuple[List[dict], str, bool]:
     if 'responseContext' in r:
         return [], continuation_token, True
     return [], continuation_token, False
-
-
-def _comment_counter_to_int(comment_counter: str) -> int:
-    comment_counter = comment_counter.split(" ")[0]
-    mult = 1
-    if comment_counter.endswith("K"):
-        if "." in comment_counter:
-            mult = mult * 10
-            comment_counter = comment_counter.replace(".", "")
-        return int(float(comment_counter[:-1]) * 100 * mult)
-    if comment_counter.endswith("M"):
-        return int(float(comment_counter[:-1]) * 100000 * mult)
-    return int(comment_counter)
 
 
 def _extract_channel_basic_info_from_html(response, start_tag) -> dict:
