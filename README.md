@@ -2,6 +2,10 @@
 
 This is a simple youtube scraper that uses the youtube API to get the videos metadata and comments of a channel.
 
+You don't need an API key to use this scraper, so there are no usage limits or associated costs.
+
+It should be noted that although there are no limits on use, YouTube can block the IP if it detects abusive use of the API.
+
 ### Features
 
 Scrape the following information of a channel:
@@ -21,32 +25,53 @@ pip install youtube_simple_scraper
 ```python
 from youtube_simple_scraper.entities import GetChannelOptions
 from youtube_simple_scraper.list_video_comments import ApiVideoCommentRepository, ApiShortVideoCommentRepository
-from youtube_simple_scraper.list_videos import ApiVideoListRepository
+from youtube_simple_scraper.list_videos import ApiChannelRepository
 from youtube_simple_scraper.logger import build_default_logger
-from youtube_simple_scraper.stop_conditions import ListCommentMaxPagesStopCondition, ListVideoMaxPagesStopCondition
+from youtube_simple_scraper.network import Requester
+from youtube_simple_scraper.stop_conditions import ListCommentMaxPagesStopCondition, \
+    ListVideoMaxPagesStopCondition
 
 if __name__ == '__main__':
+    ##############################
+    # To Avoid IP Blocking
+    # Set the request rate per second to 0.5 seconds
+    Requester.request_rate_per_second = 0.5
+    
+    # In every request sleep between 1 and 5 seconds
+    Requester.min_sleep_time_sec = 1
+    Requester.max_sleep_time_sec = 5
+    
+    # Every 100 requests sleep 30 seconds    
+    Requester.long_sleep_time_sec = 30
+    Requester.long_sleep_after_requests = 100   
+    ##############################
+    
+    
     logger = build_default_logger()
     video_comment_repo = ApiVideoCommentRepository()
     short_comment_repo = ApiShortVideoCommentRepository()
-    repo = ApiVideoListRepository(
+    repo = ApiChannelRepository(
         video_comment_repo=video_comment_repo,
         shorts_comment_repo=short_comment_repo,
         logger=logger,
     )
     opts = GetChannelOptions(
-        list_video_stop_conditions=[ListVideoMaxPagesStopCondition(2)],
-        list_video_comment_stop_conditions=[ListCommentMaxPagesStopCondition(2)],
-        list_short_stop_conditions=[ListVideoMaxPagesStopCondition(2)],
-        list_short_comment_stop_conditions=[ListCommentMaxPagesStopCondition(2)]
+        list_video_stop_conditions=[
+          ListVideoMaxPagesStopCondition(2) # Stop after 2 pages of videos
+        ],
+        list_video_comment_stop_conditions=[
+          ListCommentMaxPagesStopCondition(3) # Stop after 3 pages of comments
+        ],
+        list_short_stop_conditions=[
+          ListVideoMaxPagesStopCondition(1) # Stop after 1 page of shorts
+        ],
+        list_short_comment_stop_conditions=[
+          ListCommentMaxPagesStopCondition(4) # Stop after 4 pages of comments
+        ]
     )
-    channel = repo.get_channel("IbaiLlanos", opts)
-    print(channel.id)
-    print(channel.videos[0].title)
-    print(channel.videos[0].comments[0].text)
-    print(channel.shorts[0].title)
-    print(channel.shorts[0].comments[0].text)
-    print(channel.model_dump_json(indent=2))
+    channel_ = repo.get_channel("BancoFalabellaChile", opts)
+    print(channel_.model_dump_json(indent=2))
+
 ```
 
 Example of the output channel object parsed to json:
