@@ -82,7 +82,7 @@ class GetChannelOptions:
     list_short_comment_stop_conditions: List[ListCommentStopCondition]
 
 
-class VideoListRepository(abc.ABC):
+class ChannelRepository(abc.ABC):
     @abc.abstractmethod
     def get_channel(self, channel_id: str, opts: GetChannelOptions) -> List[Video]:
         raise NotImplementedError()

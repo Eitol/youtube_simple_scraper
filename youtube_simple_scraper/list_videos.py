@@ -5,18 +5,18 @@ from typing import List, Tuple
 import dateparser
 import requests
 
-from youtube_simple_scraper.entities import GetChannelOptions, Video, Channel, VideoComment, VideoListRepository, \
+from youtube_simple_scraper.entities import GetChannelOptions, Video, Channel, VideoComment, ChannelRepository, \
     VideoType
 from youtube_simple_scraper.list_short import get_shorts
 from youtube_simple_scraper.list_video_comments import VideoCommentRepository
-
 from youtube_simple_scraper.list_videos_request import build_list_videos_request_payload, \
     build_list_videos_request_headers, find_channel_basic_info
+from youtube_simple_scraper.network import Requester
 
 default_logger = logging.getLogger(__name__)
 
 
-class ApiVideoListRepository(VideoListRepository):
+class ApiChannelRepository(ChannelRepository):
 
     def __init__(self, video_comment_repo: VideoCommentRepository, shorts_comment_repo: VideoCommentRepository,
                  logger: logging.Logger = default_logger):
@@ -62,7 +62,7 @@ class ApiVideoListRepository(VideoListRepository):
             continuation_token = self._extract_token(response_body)
             total_videos.extend(videos)
             page_count += 1
-            if not continuation_token:
+            if not continuation_token or len(videos) < 20:
                 self._logger.info(f"No more pages for channel {channel.name}")
                 break
         return total_videos
@@ -78,11 +78,13 @@ class ApiVideoListRepository(VideoListRepository):
                 self._logger.info(f"Fetching comments for video {video.url} page {comments_page + 1}")
                 comments = self._video_comment_repo.next(video.id)
                 if len(comments) == 0:
-                    self._logger.info(f"No comments found for video {video.url}")
-                    continue
+                    self._logger.info(f"No more comments found for video {video.url}")
+                    break
                 self._logger.info(f"Found {len(comments)} comments for video {video.url}")
                 videos[i].comments.extend(comments)
                 comments_page += 1
+                if len(comments) < 20:
+                    break
 
     def _fetch_shorts_videos(self, channel: Channel, opts: GetChannelOptions) -> List[Video]:
         total_videos = []
@@ -105,7 +107,7 @@ class ApiVideoListRepository(VideoListRepository):
                 )
                 total_videos.append(video)
             page_count += 1
-            if not token or len(raw_shorts) == 0:
+            if not token or len(raw_shorts) < 20:
                 self._logger.info(f"No more shorts pages for channel {channel.name}")
                 break
         return total_videos
@@ -121,10 +123,12 @@ class ApiVideoListRepository(VideoListRepository):
                 self._logger.info(f"Fetching comments for short {short.url} page {comments_page + 1}")
                 comments = self._video_comment_repo.next(short.id)
                 if len(comments) == 0:
-                    self._logger.info(f"No comments found for short {short.url}")
-                    continue
+                    self._logger.info(f"No more comments found for short {short.url}")
+                    break
                 self._logger.info(f"Found {len(comments)} comments for short {short.url}")
                 shorts[i].comments.extend(comments)
+                if len(comments) < 20:
+                    break
                 comments_page += 1
 
     @staticmethod
@@ -153,7 +157,8 @@ class ApiVideoListRepository(VideoListRepository):
         headers = build_list_videos_request_headers(channel_id)
         payload_json = json.dumps(payload)
         url = "https://www.youtube.com/youtubei/v1/browse?prettyPrint=false"
-        resp = requests.post(url, data=payload_json, headers=headers)
+        req = requests.Request("POST", url, headers=headers, data=payload_json)
+        resp = Requester.request(req)
         return resp.json()
 
     @staticmethod

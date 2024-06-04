@@ -7,6 +7,7 @@ import requests
 from youtube_simple_scraper.continuation_token import CommentsContinuationTokenBuilder
 from youtube_simple_scraper.counters import comment_counter_to_int
 from youtube_simple_scraper.list_videos_request import USER_AGENT
+from youtube_simple_scraper.network import Requester
 
 
 def get_shorts(channel_id: str, continuation_token: str = "") -> Tuple[List[dict], str]:
@@ -41,9 +42,10 @@ def get_shorts(channel_id: str, continuation_token: str = "") -> Tuple[List[dict
         'sec-ch-ua-arch': '"arm"',
         'sec-ch-ua-bitness': '"64"',
         'user-agent': USER_AGENT,
+        'connection': 'keep-alive',
     }
-
-    response = requests.request("POST", url, headers=headers, data=payload)
+    req = requests.Request("POST", url, headers=headers, data=payload)
+    response = Requester.request(req)
     j = response.json()
     raw_videos = []
     next_continuation_token = ""
@@ -69,7 +71,8 @@ def get_shorts(channel_id: str, continuation_token: str = "") -> Tuple[List[dict
                 continue
             for c in t["tabRenderer"]["content"]["richGridRenderer"]["contents"]:
                 if 'continuationItemRenderer' in c:
-                    next_continuation_token = c['continuationItemRenderer']['continuationEndpoint']['continuationCommand'][
+                    next_continuation_token = \
+                    c['continuationItemRenderer']['continuationEndpoint']['continuationCommand'][
                         'token']
                 if "richItemRenderer" not in c:
                     continue
@@ -110,8 +113,10 @@ def get_short_comments(short_id: str, continuation_token: str = "") -> Tuple[Lis
         'accept-language': 'en',
         'content-type': 'application/json',
         'user-agent': USER_AGENT,
+        'connection': 'keep-alive',
     }
-    response = requests.request("POST", url, headers=headers, data=payload)
+    req = requests.Request("POST", url, headers=headers, data=payload)
+    response = Requester.request(req)
     j = response.json()
     raw_comments = []
     continuation_token = ""

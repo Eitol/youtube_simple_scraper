@@ -35,6 +35,7 @@ setup(
         'beautifulsoup4~=4.12.3',
         'python-dateutil~=2.9.0.post0',
         'dateparser~=1.2.0',
+        'betterproto~=1.2.5',
     ],
     author='Hector Oliveros',
     author_email='hector.oliveros.leon@gmail.com',

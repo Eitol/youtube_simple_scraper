@@ -7,6 +7,7 @@ import requests
 
 from youtube_simple_scraper.continuation_token import CommentsContinuationTokenBuilder
 from youtube_simple_scraper.counters import comment_counter_to_int
+from youtube_simple_scraper.network import Requester
 
 USER_AGENT = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
               "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -94,7 +95,7 @@ def find_channel_basic_info(channel_id: str) -> dict:
         'upgrade-insecure-requests': '1',
         'user-agent': USER_AGENT,
     }
-    response = requests.request("GET", url, headers=headers)
+    response = Requester.request(requests.Request("GET", url, headers=headers))
     start_tag = "ytInitialData = "
     return _extract_channel_basic_info_from_html(response, start_tag)
 
@@ -146,8 +147,9 @@ def get_comments_from_api(video_id: str, token: str = "") -> Tuple[List[dict], s
         'content-type': 'application/json',
         'origin': 'https://www.youtube.com',
         'x-youtube-client-version': '2.20240530.02.00',
+        'connection': 'keep-alive',
     }
-    response = requests.request("POST", url, headers=headers, data=payload)
+    response = Requester.request(requests.Request("POST", url, headers=headers, data=payload))
     comments, token, is_valid = _extract_raw_comments(response)
     if not is_valid:
         return get_comments_from_api(video_id, token)
@@ -162,10 +164,11 @@ def _extract_raw_comments(response) -> Tuple[List[dict], str, bool]:
         for ep in r["onResponseReceivedEndpoints"]:
             if "appendContinuationItemsAction" not in ep:
                 continue
-            for ci in ep["appendContinuationItemsAction"]["continuationItems"]:
-                if "continuationItemRenderer" in ci:
-                    continuation_token = ci["continuationItemRenderer"]["continuationEndpoint"][
-                        "continuationCommand"]["token"]
+            if "appendContinuationItemsAction" in ep and "continuationItems" in ep["appendContinuationItemsAction"]:
+                for ci in ep["appendContinuationItemsAction"]["continuationItems"]:
+                    if "continuationItemRenderer" in ci:
+                        continuation_token = ci["continuationItemRenderer"]["continuationEndpoint"][
+                            "continuationCommand"]["token"]
     if "frameworkUpdates" in r:
         for ep in r["frameworkUpdates"]["entityBatchUpdate"]["mutations"]:
             if "commentEntityPayload" in ep["payload"]:
