@@ -44,13 +44,11 @@ class Video(BaseModel):
 
 class Channel(BaseModel):
     id: str
+    target_id: str
     title: str
-    name: str
     description: str
     subscriber_count: int
     video_count: int
-    view_count: int
-    thumbnail_url: str
     url: str
     videos: List[Video]
 

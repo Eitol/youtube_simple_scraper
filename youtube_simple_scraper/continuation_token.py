@@ -9,14 +9,18 @@ class CommentsContinuationTokenBuilder:
 
     @classmethod
     def build(cls, video_id: str, offset: int, timestamp: Optional[int] = 0) -> str:
-        if timestamp == 0:
-            timestamp = int(datetime.datetime.now(tz=datetime.timezone.utc).timestamp())
-        sub_message = cls.build_params_str(timestamp)
+        if offset > 0:
+            if timestamp == 0:
+                timestamp = int(datetime.datetime.now(tz=datetime.timezone.utc).timestamp())
+            sub_message = cls.build_params_str(timestamp)
+            msg = f"get_newest_first--{sub_message}"
+        else:
+            msg = ""
         token = continuation.ContinuationToken(
             video_id=continuation.VideoIdSubMessage(video_id=video_id),
             field_3=6,
             sub_messsage_6=continuation.ParamsSubMessage(
-                string_1=f"get_newest_first--{sub_message}",
+                string_1=msg,
                 sub_messsage_4=continuation.ParamsSubSubMessage(
                     video_id=video_id,
                     int_6=1,

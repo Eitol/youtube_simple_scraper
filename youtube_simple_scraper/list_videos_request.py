@@ -253,7 +253,9 @@ def _extract_raw_comments(response) -> Tuple[List[dict], str, bool]:
                 comment_id = prop["commentId"]
                 comment_text = prop["content"]["content"]
                 author = prop["authorButtonA11y"]
-                published_time = dateparser.parse(prop["publishedTime"], languages=["en"])
+                published_time = dateparser.parse(prop["publishedTime"].replace("(edited)", ""), languages=["en"])
+                if published_time is None:
+                    published_time = datetime.datetime.now()
                 likes = 0
                 toolbar = ep["payload"]["commentEntityPayload"]["toolbar"]
                 if "likeCountA11y" in toolbar:

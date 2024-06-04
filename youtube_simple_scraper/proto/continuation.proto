@@ -1,0 +1,86 @@
+syntax = "proto3";
+
+message ContinuationToken {
+  VideoIdSubMessage video_id = 2; // video id. Example bkRcuK2i7oM
+  uint32 field_3 = 3; // Fixed value: 3
+  ParamsSubMessage sub_messsage_6 = 6;
+}
+
+message VideoIdSubMessage {
+  string video_id = 2;
+}
+
+message ParamsSubMessage {
+  string string_1 = 1; // get_newest_first--CggIgAQVF7fROBIFCIcgGAASBQiIIBgAEgUIqCAYABIFCJ0gGAESBQiJIBgAGAAiDgoMCOeN8bIGELiZhYYC
+  ParamsSubSubMessage sub_messsage_4 = 4;
+  uint32 offset = 5; // The number of items to skip before starting to collect the result set
+  string string_8 = 8; // Fixed value: "comments-section"
+}
+
+
+message ParamsSubSubMessage {
+  string video_id = 4; // video id. Example bkRcuK2i7oM
+  uint32 int_6 = 6; // Fixed value: 1
+  uint32 int_15 = 15; // Fixed value: 1
+}
+
+message Field1SubMessage {
+  uint32 f1 = 1; // // Fixed value: 512
+  fixed32 f2 = 2; // Fixed value 953267991
+}
+
+message TwinIntMessage {
+  uint32 int_1 = 1;
+  oneof int_2 {
+    int32 int_3 = 3;
+  }
+}
+
+message TwinInt12Message {
+  uint32 timestamp = 1; // the timestamp of the event in seconds. Example 1717289681
+  uint32 int_2 = 2; // 961364000
+}
+
+message Field4SubMessage {
+  TwinInt12Message sub_msg = 1;
+}
+
+message ParamsMessage {
+  Field1SubMessage field_1 = 1;
+  repeated TwinIntMessage field_array_2 = 2;
+  oneof int_2 {
+    uint32 int_3 = 3;
+  }
+  Field4SubMessage sub_messsage_4 = 4;
+}
+
+
+//
+//message String1Message {
+//  uint32 int_10 = 10; // fixed 35
+//}
+//
+//message TargetSubMessage {
+//  TargetSubSubMessage string_1 = 3;
+//}
+//
+//message TargetSubSubMessage {
+//  TargetSubSubSubMessage string_1 = 19;
+//}
+//
+//message TargetSubSubSubMessage {
+//  string target_id = 1; // target_id of the channel. Example: 668fd750-0000-2818-a168-d4f547f4bb38
+//}
+//
+//message TargetMessage {
+//  TargetSubMessage sub_message_1 = 110;
+//}
+//
+//message GetChannelStatsMessageSubMessage {
+//  string string_1 = 2;
+//  string target_message_3 = 3;
+//}
+//
+//message GetChannelStatsMessage {
+//  GetChannelStatsMessageSubMessage sub_message_1 = 80226972;
+//}

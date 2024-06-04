@@ -1,44 +1,71 @@
 import json
+import logging
 from typing import List, Tuple
 
 import dateparser
 import requests
 
 from youtube_simple_scraper.entities import GetChannelOptions, Video, Channel, VideoComment, VideoListRepository
-from youtube_simple_scraper.list_comments import CommentRepository, ApiCommentRepository
+from youtube_simple_scraper.list_comments import CommentRepository
 from youtube_simple_scraper.list_videos_request import build_list_videos_request_payload, \
     build_list_videos_request_headers, find_channel_basic_info
-from youtube_simple_scraper.stop_conditions import ListVideoNeverStopCondition, ListCommentMaxPagesStopCondition
+
+default_logger = logging.getLogger(__name__)
 
 
 class ApiVideoListRepository(VideoListRepository):
 
-    def __init__(self, comment_repo: CommentRepository):
+    def __init__(self, comment_repo: CommentRepository, logger: logging.Logger = default_logger):
         self._comment_repo = comment_repo
+        self._logger = logger
 
     def get_channel(self, channel_name: str, opts: GetChannelOptions) -> Channel:
         page_count = 0
+        self._logger.info(f"Fetching channel {channel_name}")
         response_body = find_channel_basic_info(channel_name)
+        self._logger.info(f"Found channel {channel_name}")
         for attempt in range(0, 3):
+            self._logger.info(f"Attempt {attempt + 1} to get channel {channel_name}")
             channel, continuation_token, is_valid = self._extract_channel_basic_info(response_body)
             if not is_valid:
+                self._logger.info(f"Invalid response for channel {channel_name}")
                 continue
+
+            initial_videos_added = False
+            total_videos = []
             while True:
-                if self._should_stop_fetch_videos(channel.videos, page_count, opts):
+                if self._should_stop_fetch_videos(total_videos, page_count, opts):
+                    self._logger.info(f"Stop condition reached for channel {channel_name}")
                     break
+                self._logger.info(f"Fetching page {page_count} for channel {channel_name}")
                 response_body = self._send_next_video_page_request(channel_name, channel.id, continuation_token)
                 videos = self._extract_raw_videos(response_body)
+                if not initial_videos_added:
+                    videos = channel.videos + videos
+                    channel.videos = []
+                    initial_videos_added = True
                 continuation_token = self._extract_token(response_body)
-                channel.videos.extend(videos)
-                comments_page = 0
-                for video in videos:
-                    if self._should_stop_fetch_video_comments(video, video.comments, comments_page, opts):
-                        break
-                    comments = self._comment_repo.next(video.id)
-                    video.comments.extend(comments)
-                if not continuation_token:
-                    break
+                for i in range(len(videos)):
+                    comments_page = 0
+                    video = videos[i]
+                    while True:
+                        if self._should_stop_fetch_video_comments(video, video.comments, comments_page, opts):
+                            self._logger.info(f"Stop condition reached for video {video.id}")
+                            break
+                        self._logger.info(f"Fetching comments for video {video.url} page {comments_page + 1}")
+                        comments = self._comment_repo.next(video.id)
+                        if len(comments) == 0:
+                            self._logger.info(f"No comments found for video {video.url}")
+                            continue
+                        self._logger.info(f"Found {len(comments)} comments for video {video.url}")
+                        videos[i].comments.extend(comments)
+                        comments_page += 1
+                total_videos.extend(videos)
                 page_count += 1
+                if not continuation_token:
+                    self._logger.info(f"No more pages for channel {channel_name}")
+                    break
+            channel.videos = total_videos
             return channel
 
     @staticmethod
@@ -112,12 +139,10 @@ class ApiVideoListRepository(VideoListRepository):
         channel: Channel = Channel.construct(
             id="",
             title="",
-            name="",
+            target_id="",
             description="",
             subscriber_count=0,
             video_count=0,
-            view_count=0,
-            thumbnail_url="",
             url="",
             videos=[]
         )
@@ -147,6 +172,14 @@ class ApiVideoListRepository(VideoListRepository):
     def _extract_channel_from_page_header_renderer_tag(cls, response_body: dict) -> Tuple[Channel, str]:
         channel = cls._build_empty_channel()
         t = response_body["header"]["pageHeaderRenderer"]
+        try:
+            channel.target_id = t["content"]["pageHeaderViewModel"]["attribution"]["attributionViewModel"][
+                "suffix"]["commandRuns"][0]["onTap"]["innertubeCommand"][
+                "showEngagementPanelEndpoint"]["engagementPanel"]["engagementPanelSectionListRenderer"][
+                "content"]["sectionListRenderer"][
+                "contents"][0]["itemSectionRenderer"]["targetId"]
+        except:
+            pass
         rows = t['content']['pageHeaderViewModel']['metadata']['contentMetadataViewModel']['metadataRows']
         for row in rows:
             for part in row['metadataParts']:
@@ -173,8 +206,15 @@ class ApiVideoListRepository(VideoListRepository):
     @classmethod
     def _extract_channel_from_c4_tabbed_header_renderer_tag(cls, response_body: dict) -> Tuple[Channel, str]:
         channel = cls._build_empty_channel()
+        try:
+            channel.target_id = response_body["contents"]["twoColumnBrowseResultsRenderer"]["tabs"][1]["tabRenderer"][
+                "content"]["richGridRenderer"]["header"]["feedFilterChipBarRenderer"]["contents"][0][
+                "chipCloudChipRenderer"]["navigationEndpoint"]["continuationCommand"]["command"][
+                "showReloadUiCommand"]["targetId"]
+        except:
+            pass
         t = response_body["header"]["c4TabbedHeaderRenderer"]
-        channel.video_count = int(t['videosCountText']['runs'][0]['text'])
+        channel.video_count = cls._abbreviate_number_to_number(t['videosCountText']['runs'][0]['text'])
         channel.id = t['channelId']
         channel.title = t['title']
         subscriber_count_text = t['subscriberCountText']['simpleText']
@@ -268,12 +308,18 @@ class ApiVideoListRepository(VideoListRepository):
     def _adapt_raw_videos(self, raw_videos: List[dict]) -> List[Video]:
         extracted_videos: List[Video] = []
         for raw_video in raw_videos:
+            likes = (raw_video.get("factoid", {}).get("factoidRenderer", {})
+                     .get("factoidRenderer", {}).get("values", {}).get(0, {}).get("simpleText", ""))
             view_count_text = raw_video.get("viewCountText", {}).get("simpleText", '')
             view_count = 0
             if view_count_text:
                 view_count = int(view_count_text.split(' ')[0].replace(",", ""))
+            else:
+                pass
             human_date = raw_video.get("publishedTimeText", {}).get("simpleText", "")
             date = dateparser.parse(human_date, languages=["en"])
+            if date is None:
+                pass
             title = ''
             if "title" in raw_video:
                 if "simpleText" in raw_video["title"]:
@@ -315,14 +361,3 @@ class ApiVideoListRepository(VideoListRepository):
     @classmethod
     def _adapt_raw_comments(cls, raw_comments: dict):
         pass
-
-
-if __name__ == '__main__':
-    comment_repo = ApiCommentRepository()
-    repo = ApiVideoListRepository(comment_repo=comment_repo)
-    opts = GetChannelOptions(
-        list_video_stop_conditions=[ListVideoNeverStopCondition()],
-        list_comment_stop_conditions=[ListCommentMaxPagesStopCondition(100)]
-    )
-    channel_ = repo.get_channel("BancoEstado", opts)
-    print(channel_)
