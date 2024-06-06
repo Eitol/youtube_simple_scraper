@@ -144,10 +144,10 @@ def get_short_comments(short_id: str, continuation_token: str = "") -> Tuple[Lis
         d = dateparser.parse(published_time)
         likes = 0
         if 'toolbar' in p and 'likeCountA11y' in p['toolbar']:
-            likes = int(p['toolbar']['likeCountA11y'].split(" ")[0])
+            likes = comment_counter_to_int(p['toolbar']['likeCountA11y'].split(" ")[0])
         reply_count = 0
         if 'toolbar' in p and 'replyCount' in p['toolbar'] and p['toolbar']['replyCount'] != "":
-            reply_count = int(p['toolbar']['replyCount'])
+            reply_count = comment_counter_to_int(p['toolbar']['replyCount'])
         raw_comments.append({
             "id": p['properties']['commentId'],
             "text": content,

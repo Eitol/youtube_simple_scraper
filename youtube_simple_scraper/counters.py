@@ -32,18 +32,21 @@ def comment_counter_to_int(c: str) -> int:
     >>> comment_counter_to_int("12.34M Likes")
     12340000
     """
-    c = c.upper()
-    r = re.compile(r'(?P<number>[\d.,]+)\s*(?P<mult>[MK])?.*')
-    match = r.match(c)
-    if not match:
+    try:
+        c = c.upper()
+        r = re.compile(r'(?P<number>[\d.,]+)\s*(?P<mult>[MK])?.*')
+        match = r.match(c)
+        if not match:
+            return 0
+        number = match.group('number')
+        mult_char = match.group('mult')
+        mult = 1
+        if mult_char == 'K':
+            mult = 1000
+        elif mult_char == 'M':
+            mult = 1000000
+        else:
+            number = number.replace(',', '').replace('.', '')
+        return int(float(number) * mult)
+    except:
         return 0
-    number = match.group('number')
-    mult_char = match.group('mult')
-    mult = 1
-    if mult_char == 'K':
-        mult = 1000
-    elif mult_char == 'M':
-        mult = 1000000
-    else:
-        number = number.replace(',', '').replace('.', '')
-    return int(float(number) * mult)

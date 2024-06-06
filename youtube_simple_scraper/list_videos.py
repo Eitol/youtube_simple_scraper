@@ -5,6 +5,7 @@ from typing import List, Tuple
 import dateparser
 import requests
 
+from youtube_simple_scraper.counters import comment_counter_to_int
 from youtube_simple_scraper.entities import GetChannelOptions, Video, Channel, VideoComment, ChannelRepository, \
     VideoType
 from youtube_simple_scraper.list_short import get_shorts
@@ -175,7 +176,7 @@ class ApiChannelRepository(ChannelRepository):
             elif 'K' in number:
                 number = number.replace('K', '000')
         try:
-            subscriber_count = int(number.split(" ")[0].replace(",", ""))
+            subscriber_count = comment_counter_to_int(number)
         except:
             subscriber_count = 0
         return subscriber_count
@@ -387,7 +388,7 @@ class ApiChannelRepository(ChannelRepository):
             view_count_text = raw_video.get("viewCountText", {}).get("simpleText", '')
             view_count = 0
             if view_count_text:
-                view_count = int(view_count_text.split(' ')[0].replace(",", ""))
+                view_count = comment_counter_to_int(view_count_text)
             else:
                 pass
             human_date = raw_video.get("publishedTimeText", {}).get("simpleText", "")
@@ -418,9 +419,9 @@ class ApiChannelRepository(ChannelRepository):
                 raw_video.get("factoid", {}).get("factoidRenderer", {})
                 .get("factoidRenderer", {}).get("values", {}).get(0, {}).get("simpleText", ""))
             if likes_str:
-                likes = int(likes_str.split(' ')[0].replace(",", ""))
+                likes = comment_counter_to_int(likes_str.split(' ')[0].replace(",", ""))
             if likes == 0:
-                likes = int(raw_video.get("likes", 0))
+                likes = comment_counter_to_int(str(raw_video.get("likes", 0)))
 
             v = Video(
                 id=raw_video["videoId"],
